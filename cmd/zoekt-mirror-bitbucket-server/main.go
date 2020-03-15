@@ -17,12 +17,10 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -86,16 +84,6 @@ func main() {
 	ctx = context.WithValue(ctx, bitbucketv1.ContextBasicAuth, basicAuth)
 	defer cancel()
 
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	httpClient := &http.Client{
-		Transport: tr,
-	}
-	httpClientConfig := func(configs *bitbucketv1.Configuration) {
-		configs.HTTPClient = httpClient
-	}
-
 	apiPath, err := url.Parse("/rest")
 	if err != nil {
 		log.Fatal(err)
@@ -105,7 +93,7 @@ func main() {
 
 	client := bitbucketv1.NewAPIClient(
 		ctx,
-		bitbucketv1.NewConfiguration(apiBaseURL, httpClientConfig),
+		bitbucketv1.NewConfiguration(apiBaseURL),
 	)
 
 	var repos []bitbucketv1.Repository
@@ -133,7 +121,7 @@ func main() {
 	}
 	repos = trimmed
 
-	if err := cloneRepos(destDir, rootURL.Host, repos, password); err != nil {
+	if err := cloneRepos(destDir, rootURL.Host, repos, username); err != nil {
 		log.Fatalf("cloneRepos: %v", err)
 	}
 
@@ -238,7 +226,7 @@ func getProjectRepos(client bitbucketv1.APIClient, projectName string) ([]bitbuc
 	return allRepos, nil
 }
 
-func cloneRepos(destDir string, host string, repos []bitbucketv1.Repository, password string) error {
+func cloneRepos(destDir string, host string, repos []bitbucketv1.Repository, username string) error {
 	for _, r := range repos {
 		fullName := filepath.Join(r.Project.Key, r.Slug)
 		config := map[string]string{
@@ -251,8 +239,8 @@ func cloneRepos(destDir string, host string, repos []bitbucketv1.Repository, pas
 		for _, cloneUrl := range r.Links.Clone {
 			// In fact, this is an https url, i.e. there's no separate Name for https.
 			if cloneUrl.Name == "http" {
-				s := strings.Split(cloneUrl.Href, "@")
-				httpsCloneUrl = s[0] + ":" + password + "@" + s[1]
+				s := strings.Split(cloneUrl.Href, "https://")
+				httpsCloneUrl = "https://" + username + "@" + s[1]
 			}
 		}
 
